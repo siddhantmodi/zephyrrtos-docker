@@ -56,13 +56,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ env.GHCR_BASE }}/${{ env.BASE_IMAGE_NAME }}
+            ${{ env.GHCR_BASE }}/${{ env.CI_IMAGE_NAME }}
           flavor: |
             latest=false
           tags: |
             type=raw,value=${{ matrix.arch }}
 
-      - name: Build and Push Base Image
+      - name: Build and Push CI Image
         uses: docker/build-push-action@v6
         with:
           push: true
@@ -119,4 +119,4 @@ jobs:
           labels: ${{ steps.meta_dev.outputs.labels }}
           build-args: |
             arch=${{ matrix.arch }}
-            BASE_IMAGE=${{ env.GHCR_BASE }}/${{ env.BASE_IMAGE_NAME }}:${{ matrix.arch }}
+            BASE_IMAGE=${{ env.GHCR_BASE }}/${{ env.CI_IMAGE_NAME }}:${{ matrix.arch }}
