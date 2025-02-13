@@ -103,7 +103,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ env.GHCR_BASE }}/${{ env.NRF_IMAGE_NAME }}
+            ${{ env.GHCR_BASE }}/${{ env.DEV_IMAGE_NAME }}
           flavor: |
             latest=false
           tags: |
