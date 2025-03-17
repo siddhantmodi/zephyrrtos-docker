@@ -1,5 +1,5 @@
 ARG BASE_IMAGE
-FROM ${BASE_IMAGE:-zephyrprojectrtos/ci-base:latest}
+FROM ${BASE_IMAGE:-ghcr.io/mistywest/zephyr-ci:amd64}
 
 ARG JLINK_VERSION=812d
 ARG NORDIC_COMMAND_LINE_TOOLS_VERSION="10-24-2/nrf-command-line-tools-10.24.2"
