@@ -71,14 +71,14 @@ RUN <<EOT
     rm -f /root/ncs/downloads/*
 EOT
 
-# Install nrfutil device runner tool
-RUN nrfutil install device
-
 # Run the Zephyr SDK setup script as 'user' in order to ensure that the
 # `Zephyr-sdk` CMake package is located in the package registry under the
 # user's home directory.
 USER $USERNAME
 WORKDIR /home/$USERNAME
+
+# Install nrfutil device runner tool
+RUN nrfutil install device
 
 # Install STM32 SVD files
 RUN git clone -n --depth=1 https://github.com/modm-io/cmsis-svd-stm32
