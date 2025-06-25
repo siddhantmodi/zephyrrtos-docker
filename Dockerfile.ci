@@ -1,5 +1,5 @@
 # Declare the ARG before using it in the FROM line
-ARG CI_BASE_VERSION="v0.27.4"
+ARG CI_BASE_VERSION="v0.27.5"
 
 # https://github.com/zephyrproject-rtos/docker-image/tree/main
 FROM ghcr.io/zephyrproject-rtos/ci-base:${CI_BASE_VERSION}
@@ -7,7 +7,7 @@ FROM ghcr.io/zephyrproject-rtos/ci-base:${CI_BASE_VERSION}
 # Args from devcontainer.json (local build) or GitHub workflow (CI) (or default)
 ARG USERNAME="user"
 ARG TOOLCHAIN="arm-zephyr-eabi"
-ARG ZSDK_VERSION="0.17.0"
+ARG ZSDK_VERSION="0.17.2"
 ARG arch=amd64
 
 ENV USERNAME=${USERNAME}
