@@ -23,6 +23,7 @@ env:
   GHCR_BASE: ghcr.io/siddhantmodi
   CI_IMAGE_NAME: zephyr-ci
   DEV_IMAGE_NAME: zephyr-dev
+  ZSDK_VERSION: 0.17.0
 
 jobs:
   build-ci:
@@ -30,7 +31,6 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      ZSDK_VERSION: 0.17.0
       CI_BASE_VERSION: v0.27.5
 
     outputs:

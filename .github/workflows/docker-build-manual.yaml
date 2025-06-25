@@ -33,6 +33,7 @@ env:
   GHCR_BASE: ghcr.io/siddhantmodi
   CI_IMAGE_NAME: zephyr-ci
   DEV_IMAGE_NAME: zephyr-dev
+  ZSDK_VERSION: ${{ github.event.inputs.zsdk_version }}
 
 jobs:
   build-ci:
@@ -41,7 +42,6 @@ jobs:
 
     # Use the manual inputs to set environment variables for this job
     env:
-      ZSDK_VERSION: ${{ github.event.inputs.zsdk_version }}
       CI_BASE_VERSION: ${{ github.event.inputs.ci_base_version }}
 
     outputs:
@@ -98,7 +98,6 @@ jobs:
 
     # Set environment variables for this job from the manual inputs
     env:
-      ZSDK_VERSION: ${{ github.event.inputs.zsdk_version }}
       JLINK_VERSION: ${{ github.event.inputs.jlink_version }}
 
     strategy:
