@@ -1,23 +1,33 @@
-name: Publish Docker
+# A new name to distinguish it from the automated workflow
+name: Manual - Publish Docker Images
 
+# This workflow is triggered ONLY manually from the Actions tab
 on:
-  push:
-    branches:
-      - main
-      - v*-branch
-    tags:
-      - v*
-  pull_request:
-    branches:
-      - main
-      - v*-branch
+  workflow_dispatch:
+    inputs:
+      zsdk_version:
+        description: 'Zephyr SDK version (e.g., 0.17.2)'
+        required: true
+        type: string
+        default: '0.17.2'
+      ci_base_version:
+        description: 'Base image version for CI container (e.g., v0.27.5)'
+        required: true
+        type: string
+        default: 'v0.27.5'
+      nrf_version:
+        description: 'Nordic nRF Command Line Tools version (e.g., 10.24.2)'
+        required: true
+        type: string
+        default: '10.24.2'
+      jlink_version:
+        description: 'J-Link Software version (e.g., 812d)'
+        required: true
+        type: string
+        default: '812d'
 
 permissions:
   packages: write
-
-concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: true
 
 env:
   GHCR_BASE: ghcr.io/siddhantmodi
@@ -29,27 +39,27 @@ jobs:
     name: Build CI Image (${{ matrix.arch }})
     runs-on: ubuntu-latest
 
+    # Use the manual inputs to set environment variables for this job
     env:
-      ZSDK_VERSION: 0.17.0
-      CI_BASE_VERSION: v0.27.5
+      ZSDK_VERSION: ${{ github.event.inputs.zsdk_version }}
+      CI_BASE_VERSION: ${{ github.event.inputs.ci_base_version }}
 
     outputs:
-      base_image_tag_amd64: ${{ steps.meta_ci.outputs.version }}
-      # base_image_tag_arm64: ${{ steps.meta_ci.outputs.version }}
+      # This output provides the exact tag of the CI image built in this job
+      base_image_tag: ${{ steps.meta_ci.outputs.version }}
 
     strategy:
       fail-fast: true
       matrix:
-        arch: 
+        arch:
           - amd64
-        # - arm64  # Uncomment to enable ARM64 builds
+        # - arm64
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Login to GitHub Container Registry
-        if: ${{ github.event_name != 'pull_request' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -70,7 +80,8 @@ jobs:
       - name: Build and Push CI Image
         uses: docker/build-push-action@v6
         with:
-          push: ${{ github.event_name != 'pull_request' }}
+          # This is a manual run, so we always push
+          push: true
           context: .
           file: Dockerfile.ci
           tags: ${{ steps.meta_ci.outputs.tags }}
@@ -81,27 +92,35 @@ jobs:
             ZSDK_VERSION=${{ env.ZSDK_VERSION }}
 
   build-dev:
-    name: Build Dev Image ${{ matrix.arch }})
+    name: Build Dev Image (${{ matrix.arch }})
     runs-on: ubuntu-latest
-    needs: build-ci  # Ensure CI image is built first
+    needs: build-ci # This job depends on the CI image being built first
 
+    # Set environment variables for this job from the manual inputs
     env:
-      JLINK_VERSION: 812d
-      NORDIC_COMMAND_LINE_TOOLS_VERSION: 10-24-2/nrf-command-line-tools-10.24.2
+      ZSDK_VERSION: ${{ github.event.inputs.zsdk_version }}
+      JLINK_VERSION: ${{ github.event.inputs.jlink_version }}
 
     strategy:
       fail-fast: true
       matrix:
-        arch: 
+        arch:
           - amd64
-        # - arm64  # Uncomment to enable ARM64 builds
+        # - arm64
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set Nordic Tools Version String
+        run: |
+          SIMPLE_VERSION="${{ github.event.inputs.nrf_version }}"
+          VERSION_DASHES=$(echo "$SIMPLE_VERSION" | tr '.' '-')
+          FULL_STRING="$VERSION_DASHES/nrf-command-line-tools-$SIMPLE_VERSION"
+          echo "NORDIC_COMMAND_LINE_TOOLS_VERSION=$FULL_STRING" >> $GITHUB_ENV
+          echo "Constructed Nordic Tools version string: $FULL_STRING"
+
       - name: Login to GitHub Container Registry
-        if: ${{ github.event_name != 'pull_request' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -117,12 +136,14 @@ jobs:
           flavor: |
             latest=false
           tags: |
+            # This tag also depends on the ZSDK version
             type=raw,value=zsdk_v${{ env.ZSDK_VERSION }}-${{ matrix.arch }}
 
       - name: Build and Push Dev Image
         uses: docker/build-push-action@v6
         with:
-          push: ${{ github.event_name != 'pull_request' }}
+          # This is a manual run, so we always push
+          push: true
           context: .
           file: Dockerfile.dev
           tags: ${{ steps.meta_dev.outputs.tags }}
