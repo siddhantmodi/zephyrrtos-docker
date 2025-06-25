@@ -34,8 +34,7 @@ jobs:
       CI_BASE_VERSION: v0.27.5
 
     outputs:
-      base_image_tag_amd64: ${{ steps.meta_ci.outputs.version }}
-      # base_image_tag_arm64: ${{ steps.meta_ci.outputs.version }}
+      base_image_tag: ${{ steps.meta_ci.outputs.version }}
 
     strategy:
       fail-fast: true
