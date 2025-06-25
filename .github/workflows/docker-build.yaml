@@ -72,7 +72,8 @@ jobs:
           labels: ${{ steps.meta_ci.outputs.labels }}
           build-args: |
             arch=${{ matrix.arch }}
-            ZSDK_VERSION=0.17.0
+            CI_BASE_VERSION=v0.27.5
+            ZSDK_VERSION=0.17.2
 
   build-dev:
     name: Build Dev Image ${{ matrix.arch }})
@@ -120,3 +121,5 @@ jobs:
           build-args: |
             arch=${{ matrix.arch }}
             BASE_IMAGE=${{ env.GHCR_BASE }}/${{ env.CI_IMAGE_NAME }}:${{ matrix.arch }}
+            JLINK_VERSION=812d
+            NORDIC_COMMAND_LINE_TOOLS_VERSION=10-24-2/nrf-command-line-tools-10.24.2
