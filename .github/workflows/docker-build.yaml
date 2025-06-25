@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GHCR_BASE: ghcr.io/mistywest
+  GHCR_BASE: ghcr.io/siddhantmodi
   CI_IMAGE_NAME: zephyr-ci
   DEV_IMAGE_NAME: zephyr-dev
 
