@@ -1,5 +1,5 @@
 ARG BASE_IMAGE
-FROM ${BASE_IMAGE:-ghcr.io/mistywest/zephyr-ci:amd64}
+FROM ${BASE_IMAGE:-ghcr.io/siddhantmodi/zephyr-ci:zsdk_v0.17.0-amd64}
 
 ARG JLINK_VERSION=812d
 ARG NORDIC_COMMAND_LINE_TOOLS_VERSION="10-24-2/nrf-command-line-tools-10.24.2"
@@ -70,6 +70,9 @@ RUN <<EOT
     chmod +x /usr/local/bin/nrfutil
     rm -f /root/ncs/downloads/*
 EOT
+
+# Create the dialout group and add the user to it
+RUN usermod -aG dialout $USERNAME
 
 # Run the Zephyr SDK setup script as 'user' in order to ensure that the
 # `Zephyr-sdk` CMake package is located in the package registry under the
