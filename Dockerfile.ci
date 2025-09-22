@@ -49,8 +49,9 @@ RUN chown -R ${USERNAME}:${USERNAME} ${ZEPHYR_SDK}
 USER $USERNAME
 WORKDIR /home/$USERNAME
 
-# Needed for nRF53 Network Core builds
-RUN pip3 install ecdsa
+# TODO: Fails
+# # Needed for nRF53 Network Core builds
+# RUN pip3 install ecdsa
 
 RUN sudo -E -- bash -c ' \
     ${ZEPHYR_SDK}/setup.sh -c && \
