@@ -23,7 +23,7 @@ env:
   GHCR_BASE: ghcr.io/${{ github.repository_owner }}
   CI_IMAGE_NAME: zephyr-ci
   DEV_IMAGE_NAME: zephyr-dev
-  ZSDK_VERSION: 0.17.0
+  ZSDK_VERSION: 0.17.4
 
 jobs:
   build-ci:
@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      CI_BASE_VERSION: v0.27.5
+      CI_BASE_VERSION: v0.28.4
 
     outputs:
       base_image_tag: ${{ steps.meta_ci.outputs.version }}
