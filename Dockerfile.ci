@@ -1,5 +1,5 @@
 # Declare the ARG before using it in the FROM line
-ARG CI_BASE_VERSION="v0.27.5"
+ARG CI_BASE_VERSION="v0.28.4"
 
 # https://github.com/zephyrproject-rtos/docker-image/tree/main
 FROM ghcr.io/zephyrproject-rtos/ci-base:${CI_BASE_VERSION}
@@ -7,7 +7,7 @@ FROM ghcr.io/zephyrproject-rtos/ci-base:${CI_BASE_VERSION}
 # Args from devcontainer.json (local build) or GitHub workflow (CI) (or default)
 ARG USERNAME="user"
 ARG TOOLCHAIN="arm-zephyr-eabi"
-ARG ZSDK_VERSION="0.17.2"
+ARG ZSDK_VERSION="0.17.4"
 ARG arch=amd64
 
 ENV USERNAME=${USERNAME}
@@ -21,8 +21,9 @@ ENV ZEPHYR_SDK_INSTALL_DIR=${ZEPHYR_SDK}
 ENV CMAKE_PREFIX_PATH=${ZEPHYR_SDK_DIR}
 
 # Install udev and git
-RUN apt-get -y update && \
-    apt-get -y install git curl
+RUN apt -y update && \
+    apt -y install git curl && \
+    apt -y install pre-commit
     
 # install minimal Zephyr SDK
 WORKDIR "${ZEPHYR_SDK_DIR}"
@@ -30,18 +31,12 @@ RUN wget ${WGET_ARGS} https://github.com/zephyrproject-rtos/sdk-ng/releases/down
     tar xf zephyr-sdk-${ZSDK_VERSION}_linux-${HOSTTYPE}_minimal.tar.xz && \
     rm zephyr-sdk-${ZSDK_VERSION}_linux-${HOSTTYPE}_minimal.tar.xz
 
-# LLVM and Clang
-RUN wget ${WGET_ARGS} https://apt.llvm.org/llvm.sh && \
-    chmod +x llvm.sh && \
-    ./llvm.sh ${LLVM_VERSION} all && \
-    rm -f llvm.sh
-
 # install toolchain and host tools
 # https://docs.zephyrproject.org/latest/develop/toolchains/zephyr_sdk.html    
 WORKDIR "${ZEPHYR_SDK}"
 RUN ./setup.sh -t ${TOOLCHAIN} -h
 
-RUN chown -R ${USERNAME}:${USERNAME} ${ZEPHYR_SDK}
+RUN chown -R ${USERNAME}:${USERNAME} ${ZEPHYR_SDK_DIR}
 
 # Run the Zephyr SDK setup script as 'user' in order to ensure that the
 # `Zephyr-sdk` CMake package is located in the package registry under the
@@ -49,14 +44,8 @@ RUN chown -R ${USERNAME}:${USERNAME} ${ZEPHYR_SDK}
 USER $USERNAME
 WORKDIR /home/$USERNAME
 
-# TODO: Fails
-# # Needed for nRF53 Network Core builds
-# RUN pip3 install ecdsa
-
 RUN sudo -E -- bash -c ' \
     ${ZEPHYR_SDK}/setup.sh -c && \
     chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/.cmake'
 
-ENV XDG_CACHE_HOME=/home/${USERNAME}/.cache
 ENV PATH="${ZEPHYR_SDK}/${TOOLCHAIN}/bin:${PATH}"
-ENV PATH="/opt/SEGGER/JLink:${PATH}"

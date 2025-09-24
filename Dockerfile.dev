@@ -74,20 +74,15 @@ EOT
 # Create the dialout group and add the user to it
 RUN usermod -aG dialout $USERNAME
 
-# Run the Zephyr SDK setup script as 'user' in order to ensure that the
-# `Zephyr-sdk` CMake package is located in the package registry under the
-# user's home directory.
+# Install STM32 SVD files
+RUN cd /opt && git clone https://github.com/modm-io/cmsis-svd-stm32
+ENV SVD_DIR=/opt/cmsis-svd-stm32
+
+# Install nrfutil device runner tool - do it as user to avoid permission issues
 USER $USERNAME
 WORKDIR /home/$USERNAME
-
-# Install nrfutil device runner tool
 RUN nrfutil install device
 
-# Install STM32 SVD files
-RUN git clone -n --depth=1 https://github.com/modm-io/cmsis-svd-stm32
-ENV SVD_DIR=/home/${USERNAME}/cmsis-svd-stm32
-
-ENV XDG_CACHE_HOME=/home/${USERNAME}/.cache
 ENV PATH="${ZEPHYR_SDK}/sysroots/x86_64-pokysdk-linux/usr/bin:${PATH}"
 ENV PATH="/opt/SEGGER/JLink:${PATH}"
 
