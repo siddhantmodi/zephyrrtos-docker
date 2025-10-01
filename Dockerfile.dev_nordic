@@ -32,12 +32,16 @@ RUN apt update && apt-get install -y --no-install-recommends \
 
     # --- Nordic Command Line Tools Installation ---
     # Download, extract, and create symlinks for the correct architecture
-RUN curl -sSL -o /tmp/nrf-tools.tar.gz "https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/desktop-software/nrf-command-line-tools/sw/versions-10-x-x/${NORDIC_COMMAND_LINE_TOOLS_VERSION}_linux-${TARGETARCH}.tar.gz" \
+RUN NORDIC_URL="https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/desktop-software/nrf-command-line-tools/sw/versions-10-x-x/${NORDIC_COMMAND_LINE_TOOLS_VERSION}_linux-${TARGETARCH}.tar.gz" \
+    && echo "Downloading Nordic Tools from ${NORDIC_URL}" \
+    && curl --fail -sSL -o /tmp/nrf-tools.tar.gz "${NORDIC_URL}" \
+    # DEBUG: Verify the downloaded file is a real gzip archive
+    && file /tmp/nrf-tools.tar.gz \
     && tar --no-same-owner -xzf /tmp/nrf-tools.tar.gz -C /opt \
     && rm /tmp/nrf-tools.tar.gz \
     && ln -s /opt/nrf-command-line-tools/bin/nrfjprog /usr/local/bin/nrfjprog \
     && ln -s /opt/nrf-command-line-tools/bin/mergehex /usr/local/bin/mergehex
-    
+
     # --- nrfutil Installation ---
     # Determine nrfutil architecture string based on TARGETARCH
 RUN NRFUTIL_ARCH="x86_64-unknown-linux-gnu" \
