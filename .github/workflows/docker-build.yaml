@@ -1,19 +1,22 @@
-name: Publish Docker
+# This workflow builds and pushes multi-architecture Docker images for amd64 and arm64.
+# It uses QEMU and Docker Buildx to build both architectures on a single amd64 runner.
+name: Publish Multi-Arch Docker
 
 on:
   push:
     branches:
       - main
-      - v*-branch
+      - 'v*-branch'
     tags:
-      - v*
+      - 'v*'
   pull_request:
     branches:
       - main
-      - v*-branch
+      - 'v*-branch'
 
 permissions:
   packages: write
+  contents: read # Required for metadata action to read git tags
 
 concurrency:
   group: ${{ github.ref }}
@@ -23,111 +26,175 @@ env:
   GHCR_BASE: ghcr.io/${{ github.repository_owner }}
   CI_IMAGE_NAME: zephyr-ci
   DEV_IMAGE_NAME: zephyr-dev
+  DEV_NORDIC_IMAGE_NAME: zephyr-dev-nordic
   ZSDK_VERSION: 0.17.4
 
 jobs:
-  build-ci:
-    name: Build CI Image (${{ matrix.arch }})
+  build-and-push-ci:
+    name: Build & Push CI Image (amd64, arm64)
     runs-on: ubuntu-latest
 
     env:
       CI_BASE_VERSION: v0.28.4
 
-    outputs:
-      base_image_tag: ${{ steps.meta_ci.outputs.version }}
-
-    strategy:
-      fail-fast: true
-      matrix:
-        arch: 
-          - amd64
-        # - arm64  # Uncomment to enable ARM64 builds
-
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Set up QEMU to enable building for non-native architectures
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # Set up Docker Buildx, which is required for multi-platform builds
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to GitHub Container Registry
-        if: ${{ github.event_name != 'pull_request' }}
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Generate tags and labels for the CI image.
+      # This creates a stable version tag and tags based on the Git ref.
       - name: Generate metadata for CI image
         id: meta_ci
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.GHCR_BASE }}/${{ env.CI_IMAGE_NAME }}
-          flavor: |
-            latest=false
+          images: ${{ env.GHCR_BASE }}/${{ env.CI_IMAGE_NAME }}
           tags: |
-            type=raw,value=zsdk_v${{ env.ZSDK_VERSION }}-${{ matrix.arch }}
+            type=raw,value=zsdk_v${{ env.ZSDK_VERSION }}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
-      - name: Build and Push CI Image
+      - name: Build and push CI multi-arch image
         uses: docker/build-push-action@v6
         with:
-          push: ${{ github.event_name != 'pull_request' }}
           context: .
-          file: Dockerfile.ci
+          file: ./Dockerfile.ci
+          # Build for both linux/amd64 and linux/arm64
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta_ci.outputs.tags }}
           labels: ${{ steps.meta_ci.outputs.labels }}
           build-args: |
-            arch=${{ matrix.arch }}
             CI_BASE_VERSION=${{ env.CI_BASE_VERSION }}
             ZSDK_VERSION=${{ env.ZSDK_VERSION }}
+          # Use cache to speed up subsequent builds
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-  build-dev:
-    name: Build Dev Image ${{ matrix.arch }})
+  build-and-push-dev:
+    name: Build & Push Dev Image (amd64, arm64)
     runs-on: ubuntu-latest
-    needs: build-ci  # Ensure CI image is built first
-
-    env:
-      JLINK_VERSION: 812d
-      NORDIC_COMMAND_LINE_TOOLS_VERSION: 10-24-2/nrf-command-line-tools-10.24.2
-
-    strategy:
-      fail-fast: true
-      matrix:
-        arch: 
-          - amd64
-        # - arm64  # Uncomment to enable ARM64 builds
+    needs: build-and-push-ci # This job runs after the CI image is successfully built
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to GitHub Container Registry
-        if: ${{ github.event_name != 'pull_request' }}
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Generate tags and labels for the dev image
       - name: Generate metadata for Dev image
         id: meta_dev
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.GHCR_BASE }}/${{ env.DEV_IMAGE_NAME }}
-          flavor: |
-            latest=false
+          images: ${{ env.GHCR_BASE }}/${{ env.DEV_IMAGE_NAME }}
           tags: |
-            type=raw,value=zsdk_v${{ env.ZSDK_VERSION }}-${{ matrix.arch }}
+            type=raw,value=zsdk_v${{ env.ZSDK_VERSION }}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}
 
-      - name: Build and Push Dev Image
+      - name: Build and push Dev multi-arch image
         uses: docker/build-push-action@v6
         with:
-          push: ${{ github.event_name != 'pull_request' }}
           context: .
-          file: Dockerfile.dev
+          file: ./Dockerfile.dev
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta_dev.outputs.tags }}
           labels: ${{ steps.meta_dev.outputs.labels }}
           build-args: |
-            arch=${{ matrix.arch }}
-            BASE_IMAGE=${{ env.GHCR_BASE }}/${{ env.CI_IMAGE_NAME }}:${{ needs.build-ci.outputs.base_image_tag }}
+            BASE_IMAGE=${{ env.GHCR_BASE }}/${{ env.CI_IMAGE_NAME }}:zsdk_v${{ env.ZSDK_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-and-push-dev-nordic:
+    name: Build & Push Dev Image for Nordic MCUs (amd64, arm64)
+    runs-on: ubuntu-latest
+    needs: build-and-push-dev # This job runs after the Dev image is successfully built
+
+    env:
+      JLINK_VERSION: 872a
+      NORDIC_COMMAND_LINE_TOOLS_VERSION: 10-24-2/nrf-command-line-tools-10.24.2
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Generate tags and labels for the dev image
+      - name: Generate metadata for Dev image
+        id: meta_dev
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.GHCR_BASE }}/${{ env.DEV_NORDIC_IMAGE_NAME }}
+          tags: |
+            type=raw,value=zsdk_v${{ env.ZSDK_VERSION }}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}
+
+      - name: Build and push Dev Nordic multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.dev_nordic
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta_dev.outputs.tags }}
+          labels: ${{ steps.meta_dev.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=${{ env.GHCR_BASE }}/${{ env.DEV_IMAGE_NAME }}:zsdk_v${{ env.ZSDK_VERSION }}
             JLINK_VERSION=${{ env.JLINK_VERSION }}
             NORDIC_COMMAND_LINE_TOOLS_VERSION=${{ env.NORDIC_COMMAND_LINE_TOOLS_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

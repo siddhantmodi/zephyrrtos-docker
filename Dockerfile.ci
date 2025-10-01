@@ -23,7 +23,8 @@ ENV CMAKE_PREFIX_PATH=${ZEPHYR_SDK_DIR}
 # Install udev and git
 RUN apt -y update && \
     apt -y install git curl && \
-    apt -y install pre-commit
+    apt -y install pre-commit && \
+    apt -y install clang-format-20
     
 # install minimal Zephyr SDK
 WORKDIR "${ZEPHYR_SDK_DIR}"

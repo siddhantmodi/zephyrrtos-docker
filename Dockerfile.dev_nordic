@@ -1,0 +1,68 @@
+# Use the multi-arch CI image as the base.
+# The build workflow should pass the correct multi-arch tag here.
+ARG BASE_IMAGE="ghcr.io/siddhantmodi/zephyr-dev:zsdk_v0.17.0-amd64"
+# Set a default architecture. This will be used for local 'docker build' commands.
+# For multi-arch builds, buildx will override this with the correct platform.
+ARG TARGETARCH="amd64"
+FROM ${BASE_IMAGE}
+
+# ARG allows these to be set by the --build-arg flag in docker build
+ARG JLINK_VERSION="872a"
+ARG NORDIC_COMMAND_LINE_TOOLS_VERSION="10-24-2/nrf-command-line-tools-10.24.2"
+
+# Switch to root for installations
+USER root
+
+# This single RUN command installs all tools and dependencies, reducing image layers.
+RUN apt update && apt-get install -y --no-install-recommends \
+    screen \
+    git \
+    curl \
+    wget \
+    #
+    # --- JLink Tools Installation ---
+    # Determine JLink architecture string based on TARGETARCH
+    && JLINK_ARCH="x86_64" \
+    && if [ "${TARGETARCH}" = "arm64" ]; then JLINK_ARCH="arm64"; fi \
+    # Download, extract, and clean up JLink
+    && mkdir -p /opt/SEGGER/JLink \
+    && curl -L -o /opt/SEGGER/JLink.tgz -J \
+        -d "accept_license_agreement=accepted" \
+        -d "submit=Download software" \
+        "https://www.segger.com/downloads/jlink/JLink_Linux_V${JLINK_VERSION}_${JLINK_ARCH}.tgz" \
+    && tar -xzf /opt/SEGGER/JLink.tgz -C /opt/SEGGER/JLink --strip-components=1 \
+    && rm /opt/SEGGER/JLink.tgz \
+    && chown -R $USERNAME:$USERNAME /opt/SEGGER \
+    #
+    # --- Nordic Command Line Tools Installation ---
+    # Download, extract, and create symlinks for the correct architecture
+    && wget -qO - "https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/desktop-software/nrf-command-line-tools/sw/versions-10-x-x/${NORDIC_COMMAND_LINE_TOOLS_VERSION}_linux-${TARGETARCH}.tar.gz" \
+        | tar --no-same-owner -xz -C /opt \
+    && ln -s /opt/nrf-command-line-tools/bin/nrfjprog /usr/local/bin/nrfjprog \
+    && ln -s /opt/nrf-command-line-tools/bin/mergehex /usr/local/bin/mergehex \
+    #
+    # --- nrfutil Installation ---
+    # Determine nrfutil architecture string based on TARGETARCH
+    && NRFUTIL_ARCH="x86_64-unknown-linux-gnu" \
+    && if [ "${TARGETARCH}" = "arm64" ]; then NRFUTIL_ARCH="aarch64-unknown-linux-gnu"; fi \
+    # Download the binary, place it in the path, and make it executable
+    && wget -q "https://files.nordicsemi.com/artifactory/swtools/external/nrfutil/executables/${NRFUTIL_ARCH}/nrfutil" -O /usr/local/bin/nrfutil \
+    && chmod +x /usr/local/bin/nrfutil \
+    #
+    # --- Final Cleanup ---
+    # Clean up apt caches to reduce image size
+    && rm -rf /var/lib/apt/lists/*
+
+# Switch to the non-root user for subsequent commands
+USER $USERNAME
+WORKDIR /home/$USERNAME
+
+# Install nrfutil device runner tool as the user to ensure correct ownership
+RUN nrfutil install device
+
+# Set environment paths
+ENV PATH="${ZEPHYR_SDK}/sysroots/x86_64-pokysdk-linux/usr/bin:${PATH}"
+ENV PATH="/opt/SEGGER/JLink:${PATH}"
+
+# Set final working directory
+WORKDIR /home/$USERNAME/workspace
