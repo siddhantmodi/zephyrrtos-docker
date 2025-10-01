@@ -36,8 +36,9 @@ RUN apt update && apt-get install -y --no-install-recommends \
     #
     # --- Nordic Command Line Tools Installation ---
     # Download, extract, and create symlinks for the correct architecture
-    && wget -qO - "https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/desktop-software/nrf-command-line-tools/sw/versions-10-x-x/${NORDIC_COMMAND_LINE_TOOLS_VERSION}_linux-${TARGETARCH}.tar.gz" \
-        | tar --no-same-owner -xz -C /opt \
+    && curl -sSL -o /tmp/nrf-tools.tar.gz "https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/desktop-software/nrf-command-line-tools/sw/versions-10-x-x/${NORDIC_COMMAND_LINE_TOOLS_VERSION}_linux-${TARGETARCH}.tar.gz" \
+    && tar --no-same-owner -xzf /tmp/nrf-tools.tar.gz -C /opt \
+    && rm /tmp/nrf-tools.tar.gz \
     && ln -s /opt/nrf-command-line-tools/bin/nrfjprog /usr/local/bin/nrfjprog \
     && ln -s /opt/nrf-command-line-tools/bin/mergehex /usr/local/bin/mergehex \
     #
