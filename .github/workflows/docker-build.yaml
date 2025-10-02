@@ -86,8 +86,8 @@ jobs:
             CI_BASE_VERSION=${{ env.CI_BASE_VERSION }}
             ZSDK_VERSION=${{ env.ZSDK_VERSION }}
           # Use cache to speed up subsequent builds
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=${{ env.GHCR_BASE }}/${{ env.CI_IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.GHCR_BASE }}/${{ env.CI_IMAGE_NAME }}:buildcache,mode=max
 
   build-and-push-dev:
     name: Build & Push Dev Image (amd64, arm64)
