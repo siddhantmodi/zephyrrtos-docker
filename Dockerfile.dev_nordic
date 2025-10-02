@@ -1,13 +1,9 @@
 # Use the multi-arch CI image as the base.
 # The build workflow should pass the correct multi-arch tag here.
-ARG TARGETARCH="amd64"
-ARG BASE_IMAGE="ghcr.io/siddhantmodi/zephyr-dev:zsdk_v0.17.0-${TARGETARCH}"
+ARG BASE_IMAGE="ghcr.io/siddhantmodi/zephyr-dev:zsdk_v0.17.4"
 # Set a default architecture. This will be used for local 'docker build' commands.
 # For multi-arch builds, buildx will override this with the correct platform.
 FROM ${BASE_IMAGE}
-
-# Re-declare ARG here to make it available in the subsequent build stages
-ARG TARGETARCH
 
 # ARG allows these to be set by the --build-arg flag in docker build
 ARG JLINK_VERSION="872a"
