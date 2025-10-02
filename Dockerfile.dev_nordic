@@ -5,6 +5,9 @@ ARG BASE_IMAGE="ghcr.io/siddhantmodi/zephyr-dev:zsdk_v0.17.4"
 # For multi-arch builds, buildx will override this with the correct platform.
 FROM ${BASE_IMAGE}
 
+# Re-declare ARG here to make it available in the subsequent build stages
+ARG TARGETARCH
+
 # ARG allows these to be set by the --build-arg flag in docker build
 ARG JLINK_VERSION="872a"
 ARG NORDIC_COMMAND_LINE_TOOLS_VERSION="10-24-2/nrf-command-line-tools-10.24.2"
@@ -19,12 +22,14 @@ RUN apt update && apt-get install -y --no-install-recommends \
     # Determine JLink architecture string based on TARGETARCH
     && JLINK_ARCH="x86_64" \
     && if [ "${TARGETARCH}" = "arm64" ]; then JLINK_ARCH="arm64"; fi \
+    && JLINK_URL="https://www.segger.com/downloads/jlink/JLink_Linux_V${JLINK_VERSION}_${JLINK_ARCH}.tgz" \
+    && echo "Downloading JLink Tools from ${JLINK_URL}" \
     # Download, extract, and clean up JLink
     && mkdir -p /opt/SEGGER/JLink \
     && curl -L -o /opt/SEGGER/JLink.tgz -J \
         -d "accept_license_agreement=accepted" \
         -d "submit=Download software" \
-        "https://www.segger.com/downloads/jlink/JLink_Linux_V${JLINK_VERSION}_${JLINK_ARCH}.tgz" \
+        "${JLINK_URL}" \
     && tar -xzf /opt/SEGGER/JLink.tgz -C /opt/SEGGER/JLink --strip-components=1 \
     && rm /opt/SEGGER/JLink.tgz \
     && chown -R $USERNAME:$USERNAME /opt/SEGGER
