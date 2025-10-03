@@ -6,6 +6,7 @@ USER root
 RUN apt update && \
     apt -y install screen && \
     apt -y install openocd && \
+    apt -y install udev && \
     usermod -aG dialout $USERNAME
 
 # Install STM32 SVD files
