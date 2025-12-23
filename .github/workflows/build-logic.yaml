@@ -1,11 +1,10 @@
-name: Build Logic
+name: Build Engine
 on:
   workflow_call:
     inputs:
       image_name: { required: true, type: string }
       dockerfile: { required: true, type: string }
-      zsdk_version: { required: true, type: string }
-      base_image_tag: { required: false, type: string }
+      build_args: { required: false, type: string }
       push_latest: { required: false, type: boolean, default: false }
 
 jobs:
@@ -15,12 +14,16 @@ jobs:
       matrix:
         platform: [linux/amd64, linux/arm64]
     steps:
-      - name: Maximize build space
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 2048
-          remove-dotnet: 'true'
-          remove-android: 'true'
+      - name: Maximise build space on runner
+        run: |
+          echo "Initial disk space:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          docker system prune -af
+          echo "Disk space after cleanup:"
+          df -h
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,9 +48,7 @@ jobs:
           context: .
           file: ${{ inputs.dockerfile }}
           platforms: ${{ matrix.platform }}
-          build-args: |
-            ZSDK_VERSION=${{ inputs.zsdk_version }}
-            BASE_IMAGE=${{ inputs.base_image_tag }}
+          build-args: ${{ inputs.build_args }}
           outputs: type=image,name=ghcr.io/${{ github.repository }}/${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
@@ -86,8 +87,12 @@ jobs:
 
       - name: Create manifest
         run: |
+          # Extract version from the first build arg (assumes ZSDK_VERSION is passed)
+          # We grep it from the inputs context to tag correctly
+          VERSION=$(echo "${{ inputs.build_args }}" | grep "ZSDK_VERSION=" | cut -d'=' -f2)
+          
           IMAGE="ghcr.io/${{ github.repository }}/${{ inputs.image_name }}"
-          TAG="${IMAGE}:zsdk_v${{ inputs.zsdk_version }}"
+          TAG="${IMAGE}:zsdk_v${VERSION}"
           
           docker buildx imagetools create -t ${TAG} \
             $(printf "${IMAGE}@sha256:%s " $(ls /tmp/digests))

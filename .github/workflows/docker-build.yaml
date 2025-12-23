@@ -1,36 +1,55 @@
 name: Publish Multi-Arch Docker
 on:
   push:
-    branches: [main]
-
-env:
-  ZSDK_VERSION: 0.17.4
+    branches: [main, 'v*-branch']
+    tags: ['v*']
 
 jobs:
-  ci-image:
-    uses: ./.github/workflows/build-logic.yml
+  # Single Source of Truth for Versions
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      zsdk: "0.17.4"
+      jlink: "V794e"
+      nordic_tools: "10-24-2/nrf-command-line-tools-10.24.2"
+      is_main: ${{ github.ref == 'refs/heads/main' }}
+    steps:
+      - run: echo "Configuring build versions..."
+
+  # 1. CI Image
+  ci:
+    needs: config
+    uses: ./.github/workflows/build-logic.yaml
     with:
       image_name: zephyr-ci
       dockerfile: ./Dockerfile.ci
-      zsdk_version: ${{ env.ZSDK_VERSION }}
-      push_latest: ${{ github.ref == 'refs/heads/main' }}
+      push_latest: ${{ needs.config.outputs.is_main == 'true' }}
+      build_args: |
+        ZSDK_VERSION=${{ needs.config.outputs.zsdk }}
 
-  dev-image:
-    needs: ci-image
-    uses: ./.github/workflows/build-logic.yml
+  # 2. Dev Image
+  dev:
+    needs: [config, ci]
+    uses: ./.github/workflows/build-logic.yaml
     with:
       image_name: zephyr-dev
       dockerfile: ./Dockerfile.dev
-      zsdk_version: ${{ env.ZSDK_VERSION }}
-      base_image_tag: ghcr.io/${{ github.repository }}/zephyr-ci:zsdk_v${{ env.ZSDK_VERSION }}
-      push_latest: ${{ github.ref == 'refs/heads/main' }}
+      push_latest: ${{ needs.config.outputs.is_main == 'true' }}
+      build_args: |
+        ZSDK_VERSION=${{ needs.config.outputs.zsdk }}
+        BASE_IMAGE=ghcr.io/${{ github.repository }}/zephyr-ci:zsdk_v${{ needs.config.outputs.zsdk }}
 
-  nordic-image:
-    needs: dev-image
-    uses: ./.github/workflows/build-logic.yml
+  # 3. Nordic Image
+  nordic:
+    needs: [config, dev]
+    uses: ./.github/workflows/build-logic.yaml
     with:
       image_name: zephyr-dev-nordic
       dockerfile: ./Dockerfile.dev_nordic
-      zsdk_version: ${{ env.ZSDK_VERSION }}
-      base_image_tag: ghcr.io/${{ github.repository }}/zephyr-dev:zsdk_v${{ env.ZSDK_VERSION }}
-      push_latest: ${{ github.ref == 'refs/heads/main' }}
+      push_latest: ${{ needs.config.outputs.is_main == 'true' }}
+      # We can simply append the extra args here
+      build_args: |
+        ZSDK_VERSION=${{ needs.config.outputs.zsdk }}
+        BASE_IMAGE=ghcr.io/${{ github.repository }}/zephyr-dev:zsdk_v${{ needs.config.outputs.zsdk }}
+        JLINK_VERSION=${{ needs.config.outputs.jlink }}
+        NORDIC_COMMAND_LINE_TOOLS_VERSION=${{ needs.config.outputs.nordic_tools }}
