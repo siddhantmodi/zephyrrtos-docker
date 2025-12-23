@@ -4,6 +4,10 @@ on:
     branches: [main, 'v*-branch']
     tags: ['v*']
 
+permissions:
+  packages: write
+  contents: read
+
 jobs:
   # Single Source of Truth for Versions
   config:
