@@ -35,9 +35,19 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      CI_BASE_VERSION: v0.28.4
+      CI_BASE_VERSION: v0.28.7
 
     steps:
+      - name: Free up disk space on runner
+        run: |
+          echo "Initial disk space:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          echo "Disk space after cleanup:"
+          df -h
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -95,6 +105,16 @@ jobs:
     needs: build-and-push-ci # This job runs after the CI image is successfully built
 
     steps:
+      - name: Free up disk space on runner
+        run: |
+          echo "Initial disk space:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          echo "Disk space after cleanup:"
+          df -h
+          
       - name: Checkout repository
         uses: actions/checkout@v4
 
