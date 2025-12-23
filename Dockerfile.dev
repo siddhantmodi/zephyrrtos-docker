@@ -13,6 +13,6 @@ RUN apt update && \
 RUN cd /opt && git clone https://github.com/modm-io/cmsis-svd-stm32
 ENV SVD_DIR=/opt/cmsis-svd-stm32
 
-# Install nrfutil device runner tool - do it as user to avoid permission issues
+# Switch to local user
 USER $USERNAME
 WORKDIR /home/$USERNAME/workspace
