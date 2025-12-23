@@ -10,7 +10,7 @@ RUN apt update && \
     usermod -aG dialout $USERNAME
 
 # Install STM32 SVD files
-RUN cd /opt && git clone https://github.com/modm-io/cmsis-svd-stm32
+RUN cd /opt && git clone --depth 1 https://github.com/modm-io/cmsis-svd-stm32
 ENV SVD_DIR=/opt/cmsis-svd-stm32
 
 # Switch to local user

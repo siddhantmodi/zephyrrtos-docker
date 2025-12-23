@@ -23,38 +23,41 @@ ENV CMAKE_PREFIX_PATH=${ZEPHYR_SDK_DIR}
 # ---------------------------------------------------------
 # Latest cmake - setup keyring
 # See: https://apt.kitware.com/
-
-RUN apt update -y \
-    && DEBIAN_FRONTEND=noninteractive \
-    apt install --no-install-recommends -y \
-    ca-certificates \
-    gpg \
-    wget \
-    && apt clean \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN test -f /usr/share/doc/kitware-archive-keyring/copyright \
-    || wget -q -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null \
-    && echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ jammy main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null \
-    && apt update -y \
-    && test -f /usr/share/doc/kitware-archive-keyring/copyright \
-    || rm /usr/share/keyrings/kitware-archive-keyring.gpg \
-    && apt install --no-install-recommends -y \
-    kitware-archive-keyring \
-    && apt clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Remove existing cmake installation
-RUN apt -y remove cmake
-
-# Install udev and git
-RUN apt -y update && \
-    apt -y install cmake && \
-    apt -y install git curl && \
-    apt -y install pre-commit && \
-    apt -y install clang-format-20
-    
 # ---------------------------------------------------------
+# System dependencies + Kitware CMake
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        gpg \
+        wget \
+        curl \
+        git \
+        sudo \
+        udev \
+        pre-commit \
+        clang-format-20; \
+    \
+    # Kitware key + repo
+    wget -qO - https://apt.kitware.com/keys/kitware-archive-latest.asc \
+        | gpg --dearmor > /usr/share/keyrings/kitware-archive-keyring.gpg; \
+    echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] \
+        https://apt.kitware.com/ubuntu/ jammy main" \
+        > /etc/apt/sources.list.d/kitware.list; \
+    \
+    apt-get update; \
+    apt-get install -y --no-install-recommends cmake; \
+    \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------
+RUN mkdir -p ${ZEPHYR_SDK_DIR} && \
+    chown ${USERNAME}:${USERNAME} ${ZEPHYR_SDK_DIR}
+
+# Run the Zephyr SDK setup script as 'user' to avoid permission issues
+USER $USERNAME
+
 # install minimal Zephyr SDK
 WORKDIR "${ZEPHYR_SDK_DIR}"
 RUN wget ${WGET_ARGS} https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${ZSDK_VERSION}/zephyr-sdk-${ZSDK_VERSION}_linux-${HOSTTYPE}_minimal.tar.xz && \
@@ -66,16 +69,10 @@ RUN wget ${WGET_ARGS} https://github.com/zephyrproject-rtos/sdk-ng/releases/down
 WORKDIR "${ZEPHYR_SDK}"
 RUN ./setup.sh -t ${TOOLCHAIN} -h
 
-RUN chown -R ${USERNAME}:${USERNAME} ${ZEPHYR_SDK_DIR}
-
-# Run the Zephyr SDK setup script as 'user' in order to ensure that the
-# `Zephyr-sdk` CMake package is located in the package registry under the
-# user's home directory.
-USER $USERNAME
-WORKDIR /home/$USERNAME
-
 RUN sudo -E -- bash -c ' \
     ${ZEPHYR_SDK}/setup.sh -c && \
     chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/.cmake'
 
 ENV PATH="${ZEPHYR_SDK}/${TOOLCHAIN}/bin:${PATH}"
+
+WORKDIR /home/$USERNAME
