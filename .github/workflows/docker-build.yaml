@@ -1,42 +1,27 @@
-# This workflow builds and pushes multi-architecture Docker images for amd64 and arm64.
-# It uses QEMU and Docker Buildx to build both architectures on a single amd64 runner.
 name: Publish Multi-Arch Docker
 
 on:
   push:
-    branches:
-      - main
-      - 'v*-branch'
-    tags:
-      - 'v*'
+    branches: [main, 'v*-branch']
+    tags: ['v*']
   pull_request:
-    branches:
-      - main
-      - 'v*-branch'
-
-permissions:
-  packages: write
-  contents: read # Required for metadata action to read git tags
-
-concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: true
+    branches: [main, 'v*-branch']
 
 env:
   GHCR_BASE: ghcr.io/${{ github.repository_owner }}
-  CI_IMAGE_NAME: zephyr-ci
-  DEV_IMAGE_NAME: zephyr-dev
-  DEV_NORDIC_IMAGE_NAME: zephyr-dev-nordic
   ZSDK_VERSION: 0.17.4
 
 jobs:
-  build-and-push-ci:
-    name: Build & Push CI Image (amd64, arm64)
+  # STEP 1: Build architectures in parallel
+  build-images:
     runs-on: ubuntu-latest
-
-    env:
-      CI_BASE_VERSION: v0.28.7
-
+    strategy:
+      fail-fast: true
+      matrix:
+        image_type: [ci, dev, dev-nordic]
+        platform: [linux/amd64, linux/arm64]
+    name: Build ${{ matrix.image_type }} (${{ matrix.platform }})
+    
     steps:
       - name: Free up disk space on runner
         run: |
@@ -49,19 +34,16 @@ jobs:
           echo "Disk space after cleanup:"
           df -h
 
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # Set up QEMU to enable building for non-native architectures
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # Set up Docker Buildx, which is required for multi-platform builds
-      - name: Set up Docker Buildx
-        id: buildx
+      - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
+      - name: Login to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
@@ -69,165 +51,70 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Generate tags and labels for the CI image.
-      # This creates a stable version tag and tags based on the Git ref.
-      - name: Generate metadata for CI image
-        id: meta_ci
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.GHCR_BASE }}/${{ env.CI_IMAGE_NAME }}
-          tags: |
-            type=raw,value=zsdk_v${{ env.ZSDK_VERSION }}
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-
-      - name: Build and push CI multi-arch image
+      - name: Build and Push by Digest
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile.ci
-          # Build for both linux/amd64 and linux/arm64
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta_ci.outputs.tags }}
-          labels: ${{ steps.meta_ci.outputs.labels }}
+          file: ./Dockerfile.${{ matrix.image_type == 'dev-nordic' && 'dev_nordic' || matrix.image_type }}
+          platforms: ${{ matrix.platform }}
           build-args: |
-            CI_BASE_VERSION=${{ env.CI_BASE_VERSION }}
             ZSDK_VERSION=${{ env.ZSDK_VERSION }}
-          # Use cache to speed up subsequent builds
-          cache-from: type=registry,ref=${{ env.GHCR_BASE }}/${{ env.CI_IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.GHCR_BASE }}/${{ env.CI_IMAGE_NAME }}:buildcache,mode=max
+            BASE_IMAGE=${{ env.GHCR_BASE }}/zephyr-${{ matrix.image_type == 'dev-nordic' && 'dev' || 'ci' }}:zsdk_v${{ env.ZSDK_VERSION }}
+          outputs: type=image,name=${{ env.GHCR_BASE }}/zephyr-${{ matrix.image_type }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
 
-  build-and-push-dev:
-    name: Build & Push Dev Image (amd64, arm64)
-    runs-on: ubuntu-latest
-    needs: build-and-push-ci # This job runs after the CI image is successfully built
-
-    steps:
-      - name: Free up disk space on runner
+      - name: Export digest
+        if: github.event_name != 'pull_request'
         run: |
-          echo "Initial disk space:"
-          df -h
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          docker system prune -af
-          echo "Disk space after cleanup:"
-          df -h
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"          
+
+      - name: Upload digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image_type }}-${{ strategy.job-index }}
+          path: /tmp/digests/*
+          retention-days: 1
+
+  # STEP 2: Merge architectures into a single Multi-Arch Manifest
+  merge-manifests:
+    runs-on: ubuntu-latest
+    needs: build-images
+    if: github.event_name != 'pull_request'
+    strategy:
+      matrix:
+        image_type: [ci, dev, dev-nordic]
+    name: Merge ${{ matrix.image_type }} Manifest
+    
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.image_type }}-*
+          merge-multiple: true
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create manifest and push
+        run: |
+          IMAGE_NAME="${{ env.GHCR_BASE }}/zephyr-${{ matrix.image_type }}"
+          TAG="${IMAGE_NAME}:zsdk_v${{ env.ZSDK_VERSION }}"
           
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Generate tags and labels for the dev image
-      - name: Generate metadata for Dev image
-        id: meta_dev
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.GHCR_BASE }}/${{ env.DEV_IMAGE_NAME }}
-          tags: |
-            type=raw,value=zsdk_v${{ env.ZSDK_VERSION }}
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}
-
-      - name: Build and push Dev multi-arch image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile.dev
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta_dev.outputs.tags }}
-          labels: ${{ steps.meta_dev.outputs.labels }}
-          build-args: |
-            BASE_IMAGE=${{ env.GHCR_BASE }}/${{ env.CI_IMAGE_NAME }}:zsdk_v${{ env.ZSDK_VERSION }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  build-and-push-dev-nordic:
-    name: Build & Push Dev Image for Nordic MCUs (amd64, arm64)
-    runs-on: ubuntu-latest
-    needs: build-and-push-dev # This job runs after the Dev image is successfully built
-
-    env:
-      JLINK_VERSION: 872a
-      NORDIC_COMMAND_LINE_TOOLS_VERSION: 10-24-2/nrf-command-line-tools-10.24.2
-
-    steps:
-      - name: Free up disk space on runner
-        run: |
-          echo "Initial disk space:"
-          df -h
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          docker system prune -af
-          echo "Disk space after cleanup:"
-          df -h
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Generate tags and labels for the dev image
-      - name: Generate metadata for Dev image
-        id: meta_dev
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.GHCR_BASE }}/${{ env.DEV_NORDIC_IMAGE_NAME }}
-          tags: |
-            type=raw,value=zsdk_v${{ env.ZSDK_VERSION }}
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}
-
-      - name: Build and push Dev Nordic multi-arch image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile.dev_nordic
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta_dev.outputs.tags }}
-          labels: ${{ steps.meta_dev.outputs.labels }}
-          build-args: |
-            BASE_IMAGE=${{ env.GHCR_BASE }}/${{ env.DEV_IMAGE_NAME }}:zsdk_v${{ env.ZSDK_VERSION }}
-            JLINK_VERSION=${{ env.JLINK_VERSION }}
-            NORDIC_COMMAND_LINE_TOOLS_VERSION=${{ env.NORDIC_COMMAND_LINE_TOOLS_VERSION }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          docker buildx imagetools create -t $TAG \
+            $(printf "${IMAGE_NAME}@sha256:%s " $(ls /tmp/digests))
+            
+          # If main branch, also tag as 'latest'
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            docker buildx imagetools create -t ${IMAGE_NAME}:latest $TAG
+          fi
