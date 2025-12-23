@@ -52,8 +52,7 @@ RUN apt -y update && \
     apt -y install cmake && \
     apt -y install git curl && \
     apt -y install pre-commit && \
-    apt -y install clang-format-20 && \
-    apt -y install clang-tidy
+    apt -y install clang-format-20
     
 # ---------------------------------------------------------
 # install minimal Zephyr SDK
