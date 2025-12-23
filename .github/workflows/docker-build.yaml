@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       zsdk: "0.17.4"
-      jlink: "V794e"
+      jlink: "872a"
       nordic_tools: "10-24-2/nrf-command-line-tools-10.24.2"
       is_main: ${{ github.ref == 'refs/heads/main' }}
     steps:
@@ -41,7 +41,7 @@ jobs:
       push_latest: ${{ needs.config.outputs.is_main == 'true' }}
       build_args: |
         ZSDK_VERSION=${{ needs.config.outputs.zsdk }}
-        BASE_IMAGE=ghcr.io/${{ github.repository }}/zephyr-ci:zsdk_v${{ needs.config.outputs.zsdk }}
+        BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/zephyr-ci:zsdk_v${{ needs.config.outputs.zsdk }}
 
   # 3. Nordic Image
   nordic:
@@ -54,6 +54,6 @@ jobs:
       # We can simply append the extra args here
       build_args: |
         ZSDK_VERSION=${{ needs.config.outputs.zsdk }}
-        BASE_IMAGE=ghcr.io/${{ github.repository }}/zephyr-dev:zsdk_v${{ needs.config.outputs.zsdk }}
+        BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/zephyr-dev:zsdk_v${{ needs.config.outputs.zsdk }}
         JLINK_VERSION=${{ needs.config.outputs.jlink }}
         NORDIC_COMMAND_LINE_TOOLS_VERSION=${{ needs.config.outputs.nordic_tools }}

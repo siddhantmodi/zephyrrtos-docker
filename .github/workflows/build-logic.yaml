@@ -49,7 +49,9 @@ jobs:
           file: ${{ inputs.dockerfile }}
           platforms: ${{ matrix.platform }}
           build-args: ${{ inputs.build_args }}
-          outputs: type=image,name=ghcr.io/${{ github.repository }}/${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=build-${{ inputs.image_name }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=build-${{ inputs.image_name }}-${{ matrix.platform }}
 
       - name: Export digest
         run: |
@@ -91,7 +93,7 @@ jobs:
           # We grep it from the inputs context to tag correctly
           VERSION=$(echo "${{ inputs.build_args }}" | grep "ZSDK_VERSION=" | cut -d'=' -f2)
           
-          IMAGE="ghcr.io/${{ github.repository }}/${{ inputs.image_name }}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}"
           TAG="${IMAGE}:zsdk_v${VERSION}"
           
           docker buildx imagetools create -t ${TAG} \
