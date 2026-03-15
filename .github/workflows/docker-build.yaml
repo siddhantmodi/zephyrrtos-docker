@@ -13,9 +13,10 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      zsdk: "0.17.4"
+      zsdk: "1.0.0"
       jlink: "872a"
       nordic_tools: "10-24-2/nrf-command-line-tools-10.24.2"
+      openocd_esp32: "v0.12.0-esp32-20260304"
       is_main: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - run: echo "Configuring build versions..."
@@ -57,3 +58,17 @@ jobs:
         BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/zephyr-dev:zsdk_v${{ needs.config.outputs.zsdk }}
         JLINK_VERSION=${{ needs.config.outputs.jlink }}
         NORDIC_COMMAND_LINE_TOOLS_VERSION=${{ needs.config.outputs.nordic_tools }}
+
+
+  # 4. ESP32 Image
+  esp32:
+    needs: [config, dev]
+    uses: ./.github/workflows/build-logic.yaml
+    with:
+      image_name: zephyr-dev-esp32
+      dockerfile: ./Dockerfile.dev_esp32
+      push_latest: ${{ needs.config.outputs.is_main == 'true' }}
+      build_args: |
+        ZSDK_VERSION=${{ needs.config.outputs.zsdk }}
+        BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/zephyr-dev:zsdk_v${{ needs.config.outputs.zsdk }}
+        OPENOCD_ESP32_VERSION=${{ needs.config.outputs.openocd_esp32 }}

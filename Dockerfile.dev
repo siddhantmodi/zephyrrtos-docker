@@ -1,4 +1,4 @@
-ARG BASE_IMAGE="ghcr.io/siddhantmodi/zephyr-ci:zsdk_v0.17.4"
+ARG BASE_IMAGE="ghcr.io/siddhantmodi/zephyr-ci:zsdk_v1.0.0"
 FROM ${BASE_IMAGE}
 
 USER root

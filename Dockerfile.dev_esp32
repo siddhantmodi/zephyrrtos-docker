@@ -1,0 +1,41 @@
+ARG BASE_IMAGE="ghcr.io/siddhantmodi/zephyr-dev:zsdk_v1.0.0"
+FROM ${BASE_IMAGE}
+
+# Re-declare ARG here to make it available in the subsequent build stages
+ARG TARGETARCH
+
+# Switch to root for installations
+USER root
+
+# --- Espressif OpenOCD Installation ---
+# Installs the ESP32-specific fork of OpenOCD and prepends it to PATH so it
+# always takes precedence over the OpenOCD bundled with the Zephyr SDK host tools.
+ARG OPENOCD_ESP32_VERSION="v0.12.0-esp32-20260304"
+RUN set -eux; \
+    # Map Docker's TARGETARCH to the naming used in Espressif release assets
+    case "${TARGETARCH}" in \
+        amd64) ESP_ARCH="amd64" ;; \
+        arm64) ESP_ARCH="arm64" ;; \
+        *) echo "Unsupported architecture: ${TARGETARCH}"; exit 1 ;; \
+    esac; \
+    # Espressif asset filenames drop the leading 'v' from the version string
+    VER_NO_V="${OPENOCD_ESP32_VERSION#v}"; \
+    ASSET="openocd-esp32-linux-${ESP_ARCH}-${VER_NO_V}.tar.gz"; \
+    URL="https://github.com/espressif/openocd-esp32/releases/download/${OPENOCD_ESP32_VERSION}/${ASSET}"; \
+    echo "Downloading Espressif OpenOCD from ${URL}"; \
+    wget -q "${URL}" -O /tmp/openocd-esp32.tar.gz; \
+    mkdir -p /opt/openocd-esp32; \
+    tar -xf /tmp/openocd-esp32.tar.gz -C /opt/openocd-esp32 --strip-components=1; \
+    rm /tmp/openocd-esp32.tar.gz; \
+    chown -R ${USERNAME}:${USERNAME} /opt/openocd-esp32
+
+# Prepend ESP32 OpenOCD ahead of the Zephyr SDK host-tools OpenOCD on PATH.
+# Also set OPENOCD_SCRIPTS so west/cmake picks up the ESP32 TCL scripts.
+ENV PATH="/opt/openocd-esp32/bin:${PATH}"
+ENV OPENOCD_SCRIPTS="/opt/openocd-esp32/share/openocd/scripts"
+
+# Switch back to the non-root user
+USER $USERNAME
+
+# Set final working directory
+WORKDIR /home/$USERNAME/workspace

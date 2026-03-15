@@ -1,4 +1,4 @@
-ARG BASE_IMAGE="ghcr.io/siddhantmodi/zephyr-dev:zsdk_v0.17.4"
+ARG BASE_IMAGE="ghcr.io/siddhantmodi/zephyr-dev:zsdk_v1.0.0"
 FROM ${BASE_IMAGE}
 
 # Re-declare ARG here to make it available in the subsequent build stages
