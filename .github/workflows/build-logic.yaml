@@ -62,7 +62,7 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ inputs.image_name }}-${{ strategy.job-index }}
+          name: digests-${{ inputs.image_name }}_${{ strategy.job-index }}
           path: /tmp/digests/*
           retention-days: 1
 
@@ -74,7 +74,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: /tmp/digests
-          pattern: digests-${{ inputs.image_name }}-*
+          pattern: digests-${{ inputs.image_name }}_*
           merge-multiple: true
 
       - name: Set up Buildx
