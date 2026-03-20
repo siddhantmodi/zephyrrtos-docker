@@ -73,6 +73,6 @@ RUN sudo -E -- bash -c ' \
     ${ZEPHYR_SDK}/setup.sh -c && \
     chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/.cmake'
 
-ENV PATH="${ZEPHYR_SDK}/${TOOLCHAIN}/bin:${PATH}"
+ENV PATH="${ZEPHYR_SDK}/gnu/${TOOLCHAIN}/bin:${PATH}"
 
 WORKDIR /home/$USERNAME
