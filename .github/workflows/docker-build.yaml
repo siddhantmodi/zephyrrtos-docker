@@ -13,10 +13,10 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      zsdk: "1.0.0"
+      zsdk: "1.0.1"
       jlink: "872a"
       nordic_tools: "10-24-2/nrf-command-line-tools-10.24.2"
-      openocd_esp32: "v0.12.0-esp32-20260304"
+      openocd_esp32: "v0.12.0-esp32-20260424"
       is_main: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - run: echo "Configuring build versions..."
