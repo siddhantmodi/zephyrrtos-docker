@@ -34,6 +34,30 @@ RUN set -eux; \
 ENV PATH="/opt/openocd-esp32/bin:${PATH}"
 ENV OPENOCD_SCRIPTS="/opt/openocd-esp32/share/openocd/scripts"
 
+# --- Espressif RISC-V Toolchain Installation ---
+# Installs riscv32-esp-elf-gcc from the Espressif crosstool-NG releases for
+# building/debugging RISC-V based ESP32 variants (C2/C3/C6/H2/P4).
+ARG RISCV_ESP_ELF_VERSION="esp-14.2.0_20260121"
+RUN set -eux; \
+    # Map Docker's TARGETARCH to the naming used in Espressif release assets
+    case "${TARGETARCH}" in \
+        amd64) ESP_ARCH="x86_64-linux-gnu" ;; \
+        arm64) ESP_ARCH="aarch64-linux-gnu" ;; \
+        *) echo "Unsupported architecture: ${TARGETARCH}"; exit 1 ;; \
+    esac; \
+    # Espressif asset filenames drop the leading 'esp-' from the version string
+    VER_NO_ESP="${RISCV_ESP_ELF_VERSION#esp-}"; \
+    ASSET="riscv32-esp-elf-${VER_NO_ESP}-${ESP_ARCH}.tar.xz"; \
+    URL="https://github.com/espressif/crosstool-NG/releases/download/${RISCV_ESP_ELF_VERSION}/${ASSET}"; \
+    echo "Downloading Espressif RISC-V toolchain from ${URL}"; \
+    wget -q "${URL}" -O /tmp/riscv32-esp-elf.tar.xz; \
+    mkdir -p /opt/riscv32-esp-elf; \
+    tar -xf /tmp/riscv32-esp-elf.tar.xz -C /opt/riscv32-esp-elf --strip-components=1; \
+    rm /tmp/riscv32-esp-elf.tar.xz; \
+    chown -R ${USERNAME}:${USERNAME} /opt/riscv32-esp-elf
+
+ENV PATH="/opt/riscv32-esp-elf/bin:${PATH}"
+
 # Switch back to the non-root user
 USER $USERNAME
 
