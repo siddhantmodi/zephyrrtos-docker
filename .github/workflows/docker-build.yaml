@@ -14,15 +14,15 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       zsdk: "1.0.1"
-      jlink: "872a"
-      nordic_tools: "10-24-2/nrf-command-line-tools-10.24.2"
+      # Nordic image tool versions (J-Link, nrfutil, pyOCD) are pinned in
+      # Dockerfile.dev_nordic next to their checksums, so they are not set here.
       openocd_esp32: "v0.12.0-esp32-20260424"
       is_main: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - run: echo "Configuring build versions..."
 
-  # 1a. CI Image (ARM)
-  ci-arm:
+  # 1. CI Image (ARM + RISC-V toolchains, see TOOLCHAINS in Dockerfile.ci)
+  ci:
     needs: config
     uses: ./.github/workflows/build-logic.yaml
     with:
@@ -31,23 +31,10 @@ jobs:
       push_latest: ${{ needs.config.outputs.is_main == 'true' }}
       build_args: |
         ZSDK_VERSION=${{ needs.config.outputs.zsdk }}
-        TOOLCHAIN=arm-zephyr-eabi
 
-  # 1b. CI Image (RISCV)
-  ci-riscv:
-    needs: config
-    uses: ./.github/workflows/build-logic.yaml
-    with:
-      image_name: zephyr-ci-riscv
-      dockerfile: ./Dockerfile.ci
-      push_latest: ${{ needs.config.outputs.is_main == 'true' }}
-      build_args: |
-        ZSDK_VERSION=${{ needs.config.outputs.zsdk }}
-        TOOLCHAIN=riscv64-zephyr-elf
-
-  # 2a. Dev Image (ARM)
-  dev-arm:
-    needs: [config, ci-arm]
+  # 2. Dev Image
+  dev:
+    needs: [config, ci]
     uses: ./.github/workflows/build-logic.yaml
     with:
       image_name: zephyr-dev
@@ -57,21 +44,9 @@ jobs:
         ZSDK_VERSION=${{ needs.config.outputs.zsdk }}
         BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/zephyr-ci:zsdk_v${{ needs.config.outputs.zsdk }}
 
-  # 2b. Dev Image (RISCV)
-  dev-riscv:
-    needs: [config, ci-riscv]
-    uses: ./.github/workflows/build-logic.yaml
-    with:
-      image_name: zephyr-dev-riscv
-      dockerfile: ./Dockerfile.dev
-      push_latest: ${{ needs.config.outputs.is_main == 'true' }}
-      build_args: |
-        ZSDK_VERSION=${{ needs.config.outputs.zsdk }}
-        BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/zephyr-ci-riscv:zsdk_v${{ needs.config.outputs.zsdk }}
-
-  # 3. Nordic Image (ARM-based)
+  # 3. Nordic Image
   nordic:
-    needs: [config, dev-arm]
+    needs: [config, dev]
     uses: ./.github/workflows/build-logic.yaml
     with:
       image_name: zephyr-dev-nordic
@@ -80,12 +55,10 @@ jobs:
       build_args: |
         ZSDK_VERSION=${{ needs.config.outputs.zsdk }}
         BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/zephyr-dev:zsdk_v${{ needs.config.outputs.zsdk }}
-        JLINK_VERSION=${{ needs.config.outputs.jlink }}
-        NORDIC_COMMAND_LINE_TOOLS_VERSION=${{ needs.config.outputs.nordic_tools }}
 
-  # 4. ESP32 Image (RISCV-based)
+  # 4. ESP32 Image
   esp32:
-    needs: [config, dev-riscv]
+    needs: [config, dev]
     uses: ./.github/workflows/build-logic.yaml
     with:
       image_name: zephyr-dev-esp32
@@ -93,5 +66,5 @@ jobs:
       push_latest: ${{ needs.config.outputs.is_main == 'true' }}
       build_args: |
         ZSDK_VERSION=${{ needs.config.outputs.zsdk }}
-        BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/zephyr-dev-riscv:zsdk_v${{ needs.config.outputs.zsdk }}
+        BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/zephyr-dev:zsdk_v${{ needs.config.outputs.zsdk }}
         OPENOCD_ESP32_VERSION=${{ needs.config.outputs.openocd_esp32 }}

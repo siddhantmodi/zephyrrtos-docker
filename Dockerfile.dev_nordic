@@ -1,69 +1,103 @@
 ARG BASE_IMAGE="ghcr.io/siddhantmodi/zephyr-dev:zsdk_v1.0.1"
 FROM ${BASE_IMAGE}
 
-# Re-declare ARG here to make it available in the subsequent build stages
+# USERNAME and ZEPHYR_SDK are inherited as ENV from the base image (see Dockerfile.ci).
+
+# Set automatically by BuildKit (amd64/arm64). The legacy builder leaves it empty,
+# so the RUN below falls back to the architecture reported by dpkg.
 ARG TARGETARCH
 
-# ARG allows these to be set by the --build-arg flag in docker build
-ARG JLINK_VERSION="872a"
-ARG NORDIC_COMMAND_LINE_TOOLS_VERSION="10-24-2/nrf-command-line-tools-10.24.2"
+# ARG allows these to be set by the --build-arg flag in docker build.
+# When bumping a version, update its checksums as well.
+#
+# SEGGER J-Link. MD5 is the only checksum SEGGER publishes (per-file "md5checksum"
+# on https://www.segger.com/downloads/jlink/). V9.82 is the version nrfutil-device 2.23.0 is tested with.
+ARG JLINK_VERSION="982"
+ARG JLINK_MD5_X86_64="49c763bc728d4dff58683247b72b1771"
+ARG JLINK_MD5_ARM64="d299a4c1aa627a99252dea0219b5eca2"
+# nrfutil launcher binary. SHA256 from the files.nordicsemi.com Artifactory storage API.
+ARG NRFUTIL_LAUNCHER_VERSION="1.4.1-f15ff58"
+ARG NRFUTIL_LAUNCHER_SHA256_X86_64="1cf4bd1d3d64f43a6b9602d8d8e8d647bec0d26d517ba72fd154f95546b50260"
+ARG NRFUTIL_LAUNCHER_SHA256_AARCH64="e7310f072132766e69b43c833c6a87a53367ea68d5b8a5f7c6fa1a45993ecde4"
+# nrfutil core and 'device' command versions
+ARG NRFUTIL_CORE_VERSION="8.2.1"
+ARG NRFUTIL_DEVICE_VERSION="2.23.0"
+# pyOCD. nRF54L/nRF54LM20A are builtin targets (>= 0.44.0), so no CMSIS pack is needed.
+ARG PYOCD_VERSION="0.46.0"
 
 # Switch to root for installations
 USER root
 
 # This single RUN command installs all tools and dependencies, reducing image layers.
-RUN apt update && apt-get install -y --no-install-recommends \
+RUN set -eux; \
     #
-    # --- JLink Tools Installation ---
-    # Determine JLink architecture string based on TARGETARCH
-    && JLINK_ARCH="x86_64" \
-    && if [ "${TARGETARCH}" = "arm64" ]; then JLINK_ARCH="arm64"; fi \
-    && JLINK_URL="https://www.segger.com/downloads/jlink/JLink_Linux_V${JLINK_VERSION}_${JLINK_ARCH}.tgz" \
-    && echo "Downloading JLink Tools from ${JLINK_URL}" \
-    # Download, extract, and clean up JLink
-    && mkdir -p /opt/SEGGER/JLink \
-    && curl -L -o /opt/SEGGER/JLink.tgz -J \
+    # --- Architecture mapping ---
+    # Map Docker's arch name to the naming used by each vendor's release assets
+    ARCH="${TARGETARCH:-$(dpkg --print-architecture)}"; \
+    case "${ARCH}" in \
+        amd64) \
+            JLINK_ARCH="x86_64"; JLINK_MD5="${JLINK_MD5_X86_64}"; \
+            NRFUTIL_ARCH="x86_64-unknown-linux-gnu"; NRFUTIL_SHA256="${NRFUTIL_LAUNCHER_SHA256_X86_64}"; \
+            SDK_HOST_ARCH="x86_64" ;; \
+        arm64) \
+            JLINK_ARCH="arm64"; JLINK_MD5="${JLINK_MD5_ARM64}"; \
+            NRFUTIL_ARCH="aarch64-unknown-linux-gnu"; NRFUTIL_SHA256="${NRFUTIL_LAUNCHER_SHA256_AARCH64}"; \
+            SDK_HOST_ARCH="aarch64" ;; \
+        *) echo "Unsupported architecture: ${ARCH}"; exit 1 ;; \
+    esac; \
+    #
+    # --- System dependencies ---
+    # curl/ca-certificates for the downloads below, libudev1 for nrfutil-device USB enumeration.
+    # --no-upgrade installs them only if missing, leaving the base image's versions untouched.
+    apt-get update; \
+    apt-get install -y --no-install-recommends --no-upgrade ca-certificates curl libudev1; \
+    rm -rf /var/lib/apt/lists/*; \
+    #
+    # --- J-Link Tools Installation ---
+    # Download (license accepted via POST), verify, extract, and clean up
+    JLINK_URL="https://www.segger.com/downloads/jlink/JLink_Linux_V${JLINK_VERSION}_${JLINK_ARCH}.tgz"; \
+    echo "Downloading J-Link Tools from ${JLINK_URL}"; \
+    curl --fail -sSL -o /tmp/JLink.tgz \
         -d "accept_license_agreement=accepted" \
         -d "submit=Download software" \
-        "${JLINK_URL}" \
-    && tar -xzf /opt/SEGGER/JLink.tgz -C /opt/SEGGER/JLink --strip-components=1 \
-    && rm /opt/SEGGER/JLink.tgz \
-    && chown -R $USERNAME:$USERNAME /opt/SEGGER \
-    #
-    # --- Nordic Command Line Tools Installation ---
-    # Download, extract, and create symlinks for the correct architecture
-    && NORDIC_URL="https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/desktop-software/nrf-command-line-tools/sw/versions-10-x-x/${NORDIC_COMMAND_LINE_TOOLS_VERSION}_linux-${TARGETARCH}.tar.gz" \
-    && echo "Downloading Nordic Tools from ${NORDIC_URL}" \
-    && curl --fail -sSL -o /tmp/nrf-tools.tar.gz "${NORDIC_URL}" \
-    # DEBUG: Verify the downloaded file is a real gzip archive
-    && file /tmp/nrf-tools.tar.gz \
-    && tar --no-same-owner -xzf /tmp/nrf-tools.tar.gz -C /opt \
-    && rm /tmp/nrf-tools.tar.gz \
-    && ln -s /opt/nrf-command-line-tools/bin/nrfjprog /usr/local/bin/nrfjprog \
-    && ln -s /opt/nrf-command-line-tools/bin/mergehex /usr/local/bin/mergehex \ 
+        "${JLINK_URL}"; \
+    echo "${JLINK_MD5}  /tmp/JLink.tgz" | md5sum -c -; \
+    mkdir -p /opt/SEGGER/JLink; \
+    tar --no-same-owner -xzf /tmp/JLink.tgz -C /opt/SEGGER/JLink --strip-components=1; \
+    rm /tmp/JLink.tgz; \
+    chown -R "${USERNAME}:${USERNAME}" /opt/SEGGER; \
     #
     # --- nrfutil Installation ---
-    # Determine nrfutil architecture string based on TARGETARCH
-    && NRFUTIL_ARCH="x86_64-unknown-linux-gnu" \
-    && if [ "${TARGETARCH}" = "arm64" ]; then NRFUTIL_ARCH="aarch64-unknown-linux-gnu"; fi \
-    # Download the binary, place it in the path, and make it executable
-    && wget -q "https://files.nordicsemi.com/artifactory/swtools/external/nrfutil/executables/${NRFUTIL_ARCH}/nrfutil" -O /usr/local/bin/nrfutil \
-    && chmod +x /usr/local/bin/nrfutil \
+    # Versioned launcher binary; core and the 'device' command are pinned below as the user
+    NRFUTIL_URL="https://files.nordicsemi.com/artifactory/swtools/external/nrfutil/executables/${NRFUTIL_ARCH}/nrfutil-${NRFUTIL_ARCH}-${NRFUTIL_LAUNCHER_VERSION}"; \
+    echo "Downloading nrfutil from ${NRFUTIL_URL}"; \
+    curl --fail -sSL -o /usr/local/bin/nrfutil "${NRFUTIL_URL}"; \
+    echo "${NRFUTIL_SHA256}  /usr/local/bin/nrfutil" | sha256sum -c -; \
+    chmod 0755 /usr/local/bin/nrfutil; \
     #
-    # --- Final Cleanup ---
-    # Clean up apt caches to reduce image size
-    && rm -rf /var/lib/apt/lists/*
+    # --- pyOCD Installation ---
+    # Installed into the base image's Python venv (/opt/python/venv, first on PATH)
+    pip install --no-cache-dir "pyocd==${PYOCD_VERSION}"; \
+    pip check; \
+    #
+    # --- Zephyr SDK host tools ---
+    # ENV can't branch on arch, so expose the arch-specific sysroot through a fixed symlink
+    SDK_HOSTTOOLS="${ZEPHYR_SDK}/hosttools/sysroots/${SDK_HOST_ARCH}-pokysdk-linux"; \
+    test -d "${SDK_HOSTTOOLS}/usr/bin"; \
+    ln -sfn "${SDK_HOSTTOOLS}" /opt/zephyr-sdk-hosttools
 
 # Switch to the non-root user for subsequent commands
 USER $USERNAME
 WORKDIR /home/$USERNAME
 
-# Install nrfutil device runner tool as the user to ensure correct ownership
-RUN nrfutil install device
+# Pin nrfutil core and install the 'device' command as the user to ensure correct ownership.
+# (The RISC-V toolchain for the nRF54L/nRF54H coprocessors comes from the base image.)
+RUN set -eux; \
+    nrfutil self-upgrade --to-version "${NRFUTIL_CORE_VERSION}"; \
+    nrfutil install "device=${NRFUTIL_DEVICE_VERSION}" --force
 
-# Set environment paths
-ENV PATH="${ZEPHYR_SDK}/sysroots/x86_64-pokysdk-linux/usr/bin:${PATH}"
-ENV PATH="/opt/SEGGER/JLink:${PATH}"
+# Set environment paths. SDK host tools (OpenOCD, dtc, ...) take precedence over system packages.
+ENV PATH="/opt/SEGGER/JLink:/opt/zephyr-sdk-hosttools/usr/bin:${PATH}"
 
 # Set final working directory
 WORKDIR /home/$USERNAME/workspace
